@@ -8,4 +8,5 @@ Desktop.ini
 /Bayes/adult.txt
 /Bayes/adult_test.txt
 12306/__pycache__/
+12306/catch/*
 *.log

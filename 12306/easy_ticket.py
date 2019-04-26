@@ -1,8 +1,10 @@
 import requests
 import time
+import json
 import re
 import os
 import logging
+import binascii
 from station import station
 from prettytable import PrettyTable
 
@@ -23,7 +25,7 @@ class Ticket:
             'search_end':'到达站',
             'time_setout':'出发',
             'time_arrived':'到达',
-            #'time_travel':'历时',
+            'time_travel':'历时',
             'have_ticket':'有票',
             'wuzuo':'无座',
             'yingzuo':'硬座',
@@ -51,6 +53,13 @@ class Ticket:
                         continue
                     trainItem['type'] = '直达'
                     trainList.append(trainItem)
+                print('== 直达车次 == {} =='.format(configItem['param']['train_date']))
+                self.printTable(trainList)
+                print()
+                
+                #遍历结果集
+                # print('查询途径站：')
+                for trainItem in trainList:
                     #获取途经站
                     for stationTmp in self.queryByTrainNo(trainItem, configItem):
                         key = '{}_{}_{}'.format(
@@ -58,16 +67,29 @@ class Ticket:
                             station.name2id(stationTmp['station_name']),
                             configItem['param']['train_date']
                         )
-                        if key in halfTichet:
-                            halfTichet[key][trainItem['train_id']] = stationTmp
-                        else:
-                            halfTichet[key] = {
-                                trainItem['train_id']:stationTmp
-                            }
-                    time.sleep(1)
-                self.printTable(trainList)
+                        if key not in halfTichet:
+                            halfTichet[key] = {}
+                        halfTichet[key][trainItem['train_id']] = stationTmp
+                    # print(halfTichet)
+                    '''
+                    #展示车次以及途经车站
+                    print(trainItem['train_id']+':',','.join(
+                        [
+                            x['station_name']
+                            for x in [
+                                halfTichet[key][trainItem['train_id']]
+                                for key in halfTichet
+                                if trainItem['train_id'] in halfTichet[key]
+                            ]
+                        ]
+                    ))
+                    '''
                 #遍历halfTichet，获取半途车票
+                # print('apiTrain')
+                print('== 其他车次 == {} =='.format(configItem['param']['train_date']))
                 for key in halfTichet:
+                    # print(list(halfTichet[key].values()))
+                    # print(list(halfTichet[key].values())[0]['station_name'])
                     param = key.split('_')
                     for trainItem in self.apiTrain({
                             'from_station':param[0],
@@ -80,8 +102,8 @@ class Ticket:
                             continue
                         trainItem['type'] = '补票' if halfTichet[key][trainItem['train_id']]['isEnabled'] else '多买'
                         trainListOther.append(trainItem)
-                    time.sleep(1)
                 self.printTable(trainListOther)
+                print()
             exit()
             #延时重启
             time.sleep(self.sleep_sec)
@@ -120,6 +142,7 @@ class Ticket:
 
     #请求12306获取数据，返回列表
     def apiTrain(self, param):
+        time.sleep(1.5)
         url = self.generateUrl(param)
         logging.info(url)
         response = self.s.get(url)
@@ -163,33 +186,49 @@ class Ticket:
             train_no = trainItem['train_no']
         )
         logging.info(url)
-        response = self.s.get(url)
-        ret = []
-        if response.status_code != 200:
-            logging.error('status_code:' + response.status_code + "\nurl:" + url)
-            exit()
+        #判断是否有缓存
+        crc32Code = binascii.crc32(url.encode('utf-8'))
+        catchPath = './catch/{}'.format(crc32Code)
+        if os.path.exists(catchPath):
+            with open(catchPath,'r') as f:
+                retData = f.read()
+            retData = json.loads(retData)
+        else:
+            response = self.s.get(url)
+            if response.status_code != 200:
+                logging.error('status_code:' + response.status_code + "\nurl:" + url)
+                exit()
 
-        if response.text[:1] != '{':
-            logging.error('page error:' + url)
-            exit()
-        
-        for item in response.json().get('data').get('data'):
+            if response.text[:1] != '{':
+                logging.error('page error:' + url)
+                exit()
+            retData = response.json().get('data').get('data')
+            with open(catchPath,'w') as f:
+                f.write(json.dumps(retData))
+            time.sleep(1.5)
+        ret = []
+        for key in range(len(retData)):
+            item = retData[key]
+            #跳过非途经站
+            if item['isEnabled'] == False:
+                continue
             #跳过始发站
-            if item['station_no'] == '01':
+            if item['station_name'] == trainItem['search_start']:
+                if key > 0:
+                    ret.append(retData[key-1])
                 continue
             #跳过终点站
             if item['station_name'] == trainItem['search_end']:
-                continue
-            ret.append(item)
-            #终点站的下一站跳出
-            if item['isEnabled'] == False:
+                if key < len(retData) - 1:
+                    ret.append(retData[key+1])
                 break
+            ret.append(item)
         return ret
 
     def filterTrain(self, config, item):
         #遍历正则过滤
         for colName in config['filter']:
-            if config['filter'][col_name] != []:
+            if config['filter'][colName] != []:
                 #任何一项匹配
                 flag = False
                 for preg in config['filter'][colName]:
@@ -290,20 +329,21 @@ if __name__ == '__main__':
         #发车时间和到达时间的区间
         'time_setout_min':'19:00',
         'time_setout_max':'23:59',
-        # 'time_arrived_min':'.*',
-        # 'time_arrived_max':'.*'
+        # 'time_arrived_min':'',
+        # 'time_arrived_max':''
     })
+
     #回北京车票
-    '''
+
     ticket.addsearch({
-        'train_date':'2019-05-04',
-        'from_station':'XTP',
-        'to_station':'BJP',
-        'purpose_codes':'ADULT'
+        'train_date':'2019-05-04',              #乘车日期
+        'from_station':station.name2id('邢台'), #起始站
+        'to_station':station.name2id('北京'),   #到达站
+        'purpose_codes':'ADULT'                 #成人票
     },{
-        'search_start':[],
-        'state':[],
-        'train_id':['^(Z|K)'],
+        # 'search_start':[],
+        # 'state':[],
+        'train_id':[],
         #'time_setout':[],
         #'time_arrived':[],
         #'have_ticket':['Y','N'],
@@ -311,9 +351,10 @@ if __name__ == '__main__':
         #'yingzuo':[],
         #'2dengzuo':[],
     },{
-        'time_setout_min':'09:55',
-        'time_setout_max':'19:19',
-        'time_arrived_max':'21:00'
+        'time_setout_min':'12:00',
+        # 'time_setout_max':'19:19',
+        'time_arrived_max':'21:00',
+        # 'time_arrived_max':''
     })
-    '''
+
     ticket.main()
