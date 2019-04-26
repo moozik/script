@@ -1,0 +1,11 @@
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+*.so
+*.egg
+*.egg-info
+/Bayes/adult
+/Bayes/adult.txt
+/Bayes/adult_test.txt
+12306/__pycache__/
+*.log
