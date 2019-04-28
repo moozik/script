@@ -1,15 +1,14 @@
 import requests
-import time
-import json
-import re
-import os
-import logging
 import binascii
+import os,sys,re,json,time,logging
 from station import station
 from prettytable import PrettyTable
 
 class Ticket:
     def __init__(self, station):
+        #新建catch目录
+        if os.path.exists(sys.path[0] + '\\catch') == False:
+            os.mkdir(sys.path[0] + '\\catch')
         #搜索条件列表
         self.config = []
         #创建会话对象
@@ -37,7 +36,7 @@ class Ticket:
         }
         #日志
         LOG_FORMAT = "%(asctime)s - %(levelname)s - %(message)s"
-        logging.basicConfig(filename='ycy.log', level=logging.INFO, format=LOG_FORMAT)
+        logging.basicConfig(filename=sys.path[0] + '\\ycy.log', level=logging.INFO, format=LOG_FORMAT)
     
     def main(self):
         while True:
@@ -53,7 +52,10 @@ class Ticket:
                         continue
                     trainItem['type'] = '直达'
                     trainList.append(trainItem)
-                print('== 直达车次 == {} =='.format(configItem['param']['train_date']))
+                print('== 直达车次 {0} {1}->{2} =='.format(
+                    configItem['param']['train_date'],
+                    station.id2name(configItem['param']['from_station']),
+                    station.id2name(configItem['param']['to_station'])))
                 self.printTable(trainList)
                 print()
                 
@@ -86,7 +88,10 @@ class Ticket:
                     '''
                 #遍历halfTichet，获取半途车票
                 # print('apiTrain')
-                print('== 其他车次 == {} =='.format(configItem['param']['train_date']))
+                print('== 补票车次 {0} {1}->{2} =='.format(
+                    configItem['param']['train_date'],
+                    station.id2name(configItem['param']['from_station']),
+                    station.id2name(configItem['param']['to_station'])))
                 for key in halfTichet:
                     # print(list(halfTichet[key].values()))
                     # print(list(halfTichet[key].values())[0]['station_name'])
@@ -188,7 +193,7 @@ class Ticket:
         logging.info(url)
         #判断是否有缓存
         crc32Code = binascii.crc32(url.encode('utf-8'))
-        catchPath = './catch/{}'.format(crc32Code)
+        catchPath = sys.path[0] + '\\catch\\' + str(crc32Code)
         if os.path.exists(catchPath):
             with open(catchPath,'r') as f:
                 retData = f.read()
@@ -329,8 +334,8 @@ if __name__ == '__main__':
         #发车时间和到达时间的区间
         'time_setout_min':'19:00',
         'time_setout_max':'23:59',
-        # 'time_arrived_min':'',
-        # 'time_arrived_max':''
+        # 'time_arrived_min':'00:00',
+        # 'time_arrived_max':'23:59'
     })
 
     #回北京车票
@@ -343,7 +348,7 @@ if __name__ == '__main__':
     },{
         # 'search_start':[],
         # 'state':[],
-        'train_id':[],
+        #'train_id':[],
         #'time_setout':[],
         #'time_arrived':[],
         #'have_ticket':['Y','N'],
