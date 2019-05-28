@@ -2,9 +2,8 @@
 date_default_timezone_set("Asia/Shanghai");
 
 class noteApp{
-    
-    const __SAVEFILE__ = 'note.json';
-    const __PASS__ = '4399';
+    const __FILEHEAD__ = '4jrov9vido';
+    const __PASS__ = ['1234'];
     
     private $appName = 'moozikNote';
     private $html_title = '单页笔记';
@@ -16,9 +15,21 @@ class noteApp{
     
     public function __construct(){
         $this->config();
-        $this->noteData();
-        $this->route();
+        if($this->checkpasswd()){
+            $this->noteData();
+            $this->route();
+        }else{
+            $this->pageLogin();
+        }
         $this->showPage();
+    }
+    function checkpasswd(){
+        //登陆页面
+        if(isset($_COOKIE['passwd']) && in_array($_COOKIE['passwd'],self::__PASS__)){
+            return true;
+        }else{
+            return false;
+        }
     }
     
     function config(){
@@ -120,12 +131,6 @@ class noteApp{
     }
     
     function route(){
-        //登陆页面
-        if(!isset($_COOKIE['pass_' . self::__PASS__])){
-            //echo self::__PASS__;
-            $this->pageLogin();
-            return;
-        }
         //接收修改POST
         if(!empty($_POST)){
             $this->actionUpdate();
@@ -151,10 +156,10 @@ class noteApp{
         //读
         if($isRead){
             if(empty($this->noteArr)){
-                if(!file_exists(self::__SAVEFILE__)){
+                if(!file_exists($this->filepath())){
                     return [];
                 }else{
-                    $this->noteArr = json_decode(file_get_contents(self::__SAVEFILE__),1);
+                    $this->noteArr = json_decode(file_get_contents($this->filepath()),1);
                 }
                 foreach($this->noteArr as &$item){
                     $item['content'] = base64_decode($item['content']);
@@ -173,21 +178,24 @@ class noteApp{
                     $item['group'] = '';
                 }
             }
-            file_put_contents(self::__SAVEFILE__, json_encode($this->noteArr));
+            file_put_contents($this->filepath(), json_encode($this->noteArr));
         }
     }
     
     function select(){
         return '<option value="all">全部</option><option value="default">未分类</option><option>' . implode('</option><option>', $this->group) . '</option>';
     }
+    function filepath($passwd = ''){
+        $passwd = $_COOKIE['passwd'];
+        return self::__FILEHEAD__ . '_' . $passwd . '.json';
+    }
     
     //主页展示
     function pageList(){
-        //<a href="javascript:document.cookie= \'pass_4399=1;expires=0;\';location.reload();" class="main_title">logout</a>
         $echo = '<div>
         <a href="?a=update" class="main_title">新笔记</a>
         <select onchange="chkgroup(this.value)" class="main_title">'.$this->select().'</select>
-        
+        <a href="javascript:document.cookie= \'passwd=9999;\';location.reload();" class="main_title">logout</a>
         </div>
         <hr>';
         foreach($this->noteData() as $noteItem){
@@ -250,8 +258,8 @@ class noteApp{
         <script>
         function fun(i){
             document.getElementById('pass').value += i;
-            if(document.getElementById('pass').value.length == " . strlen(self::__PASS__) . "){
-                document.cookie = 'pass_' + document.getElementById('pass').value + '=1;';
+            if(document.getElementById('pass').value.length == " . strlen(self::__PASS__[0]) . "){
+                document.cookie = 'passwd='+document.getElementById('pass').value+';';
                 location.reload();
             }
         }
@@ -309,11 +317,11 @@ class noteApp{
             $id = $_POST['id'];
         }
         $this->noteArr[$id] = [
-                'time'=>date('Y-m-d H:i:s'),
-                'id'=>$id,
-                'title'=>$_POST['title'],
-                'content'=>$_POST['content'],
-                'group'=>$_POST['group']
+                'time' => date('Y-m-d H:i:s'),
+                'id' => $id,
+                'title' => $_POST['title'],
+                'content' => $_POST['content'],
+                'group' => $_POST['group'],
             ];
         $this->noteData(false);
         header("location:" . $_SERVER['PHP_SELF']);
@@ -328,5 +336,4 @@ class noteApp{
 }
 
 $app = new noteApp();
-// print_r($app->noteArr);
 exit;
